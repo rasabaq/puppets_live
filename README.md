@@ -60,21 +60,43 @@ allows, run more sessions or use the underlying `puppets` library directly.
 
 This app depends on a prebuilt wheel of the `puppets` library, vendored
 under `vendor/` rather than installed from a package index, so the app's
-behavior only changes when someone deliberately updates it.
+behavior only changes when someone deliberately updates it. A vendored wheel
+also means the build needs no credentials: the library's own repository is
+private, and installing from it would otherwise require an access token.
 
-To update:
+The update is driven from the **source repo**, not from here:
 
-1. In the source repo, build a fresh wheel: `python -m build --wheel`.
-2. Copy the new `dist/puppets-<version>-py3-none-any.whl` into `vendor/`
-   here, removing the old one.
-3. Update `requirements.txt` to reference the new filename.
-4. Update `vendor/VERSION` with the new library version **and** the source
-   repo's git commit SHA the wheel was built from
-   (`git rev-parse HEAD` in the source repo). This is the only record of
-   which library revision is actually deployed — without it, drift between
-   the vendored wheel and the source repo becomes unrecoverable.
-5. If `CODEBOOK.md` changed upstream, copy the new version too, and update
-   the version note above.
+```bash
+cd ../puppets                       # the private library repo
+git commit -am "feat: ..."          # the release refuses a dirty src/
+scripts/release_to_live.sh patch    # or: minor, major, or an explicit 0.7.2
+```
+
+That bumps the library version, runs its packaging guards, builds the wheel,
+copies it into `vendor/` here, rewrites `vendor/VERSION` and the pin in
+`requirements.txt`, and runs this app's tests against the new wheel. It stops
+before committing, so review and ship yourself:
+
+```bash
+git status --short
+git add -A && git commit -m "chore: bump puppets to <version>"
+git push
+```
+
+Streamlit Cloud redeploys on push. Confirm the build log installs the new
+wheel filename before trusting the change is live.
+
+**The version must always change.** Rebuilding a wheel under a version that
+is already installed lets pip skip it as already-satisfied, so the deployed
+app keeps running the old library while this repo says it was updated. The
+release script bumps it for you; if you ever do this by hand, do not skip it.
+
+`vendor/VERSION` records the library version **and** the source commit it was
+built from. That is the only record of which revision is actually deployed —
+when a result here looks wrong, it names the exact commit to go look at.
+
+If `CODEBOOK.md` changed upstream, copy it across too; it is a copy, not a
+shared file, and will otherwise drift.
 
 ## Notes on scope
 
