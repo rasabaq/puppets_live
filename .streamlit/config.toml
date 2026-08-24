@@ -1,0 +1,12 @@
+[theme]
+base = "light"
+primaryColor = "#c22f1f"
+backgroundColor = "#fbfaf5"
+secondaryBackgroundColor = "#f2efe4"
+textColor = "#111110"
+linkColor = "#c22f1f"
+font = "monospace"
+
+[server]
+maxUploadSize = 25
+enableXsrfProtection = true
