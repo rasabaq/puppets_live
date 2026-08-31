@@ -21,12 +21,16 @@ from pathlib import Path
 import streamlit as st
 
 from puppets import pipeline
-from puppets.audio import SUFFIX_TO_FORMAT as AUDIO_SUFFIXES
 from puppets.config import DEFAULT_MODE, DEFAULT_MODEL, Config
 from puppets.images import SUPPORTED_SUFFIXES
 from puppets.logging_setup import setup_logging
 from puppets.pipeline import Bundle, run
-from puppets.schema import LABEL_FIELDS, REASON_SUFFIX
+from puppets.schema import (
+    AD_SUBVARIABLES,
+    FOOD_CATEGORIES,
+    LABEL_FIELDS,
+    REASON_SUFFIX,
+)
 from puppets.storage import labels_csv, raw_jsonl, summary_json
 
 setup_logging()
@@ -42,23 +46,47 @@ CODEBOOK_PATH = Path(__file__).parent / "CODEBOOK.md"
 # with the shared key while the app is deployed publicly.
 MAX_CALLS = 100
 
+# Built from schema.AD_SUBVARIABLES, not hand-wired, so a further ad
+# sub-variable gets its display row here with no edit to this file. The
+# phrasing is derived from each entry's own `label` rather than restated per
+# field, so it cannot drift from the registry.
 LABEL_HINT = {
-    "is_ad": {1: "advertising", 0: "organic content", None: "not returned"},
+    entry.field: {1: entry.label.lower(), 0: f"no {entry.label.lower()}",
+                  None: "not returned"}
+    for entry in AD_SUBVARIABLES
+}
+LABEL_HINT.update({
     "has_food": {1: "food present", 0: "no food", None: "not returned"},
     "is_upf": {1: "ultra-processed (NOVA 4)", 0: "NOVA 1-3", None: "not applicable"},
-}
+})
 
 # 1 => this reading is the thing the audit is trying to catch; render as a
 # flagged (red) finding. 0/None are informational, not a finding.
 LABEL_IS_FINDING = {
-    "is_ad": {1: True, 0: False, None: False},
+    entry.field: {1: True, 0: False, None: False}
+    for entry in AD_SUBVARIABLES
+}
+LABEL_IS_FINDING.update({
     "has_food": {1: False, 0: False, None: False},
     "is_upf": {1: True, 0: False, None: False},
-}
+})
+
+# The descriptive label behind each food_category slug, so the panel can show
+# what the group covers next to the raw value that lands in labels.csv. Built
+# from schema.FOOD_CATEGORIES for the same anti-drift reason: one source for
+# the categories, never a second copy.
+FOOD_CATEGORY_LABEL = dict(FOOD_CATEGORIES)
+
+# Worst case per unit: the four ad agents and the food agent always run; a
+# food-positive unit adds UPF, food-category and foods; an ad-positive unit
+# adds the sponsoring-brand call.
+MAX_CALLS_PER_UNIT = len(AD_SUBVARIABLES) + 5
 
 AGENT_MODE_CAPTION = (
-    "Agent flow: 2-3 calls per unit — ad-detection and food-detection run "
-    "concurrently, then UPF classification runs only when food is present."
+    f"Agent flow: {len(AD_SUBVARIABLES) + 1}-{MAX_CALLS_PER_UNIT} calls per "
+    "unit — the ad sub-variable agents and food-detection run concurrently; "
+    "UPF classification, food-category and foods run only when food is "
+    "present, and the sponsoring-brand call only when the unit is an ad."
 )
 
 st.set_page_config(page_title="Puppets — screenshot labelling", page_icon="🧪",
@@ -354,26 +382,102 @@ def label_list(result) -> str:
     rows = []
     for field in LABEL_FIELDS:
         value = getattr(result, field)
-        shown = "null" if value is None else str(value)
-        hint = html.escape(LABEL_HINT[field][value])
-        value_class = "audit-value flag" if LABEL_IS_FINDING[field][value] else "audit-value"
-        reason = getattr(result, field + REASON_SUFFIX, None)
-        reason_html = (
-            f'<div class="audit-reason">{html.escape(reason)}</div>'
-            if reason else ""
-        )
-        rows.append(
-            f'<div class="audit-item">'
-            f'<div class="audit-row">'
-            f'<span class="audit-field">{html.escape(field)}</span>'
-            f'<span class="audit-dots"></span>'
-            f'<span class="{value_class}">{shown}'
-            f'<span class="hint">— {hint}</span></span>'
-            f'</div>'
-            f'{reason_html}'
-            f'</div>'
-        )
+        rows.append(audit_item(
+            field,
+            "null" if value is None else str(value),
+            LABEL_HINT[field][value],
+            flagged=LABEL_IS_FINDING[field][value],
+            reason=getattr(result, field + REASON_SUFFIX, None),
+        ))
+
+    # food_category, brands and foods are not in LABEL_FIELDS — that tuple is
+    # the binary-label machinery. They are appended by hand so the panel shows
+    # every variable the flow assigns, in the order the agents run.
+    category = result.food_category
+    rows.append(audit_item(
+        "food_category",
+        "null" if category is None else category,
+        FOOD_CATEGORY_LABEL.get(category, "not applicable")
+        if category else "not applicable",
+        # A category is a description, never the finding itself — is_upf is
+        # the variable that says a unit is the thing the audit hunts for.
+        flagged=False,
+        reason=result.food_category_reason,
+    ))
+    rows.append(audit_item(
+        "brands",
+        list_value(result.brands),
+        brands_hint(result.brands),
+        # A named payer is the ad's sponsor, and an identified sponsor of a
+        # UPF promotion is precisely what the audit is looking for.
+        flagged=bool(result.brands),
+        reason=result.brands_reason,
+    ))
+    rows.append(audit_item(
+        "foods",
+        list_value(result.foods),
+        foods_hint(result.foods),
+        # Foods on screen describe the unit; they are not themselves the
+        # finding the audit hunts for — is_upf carries that.
+        flagged=False,
+        reason=result.foods_reason,
+    ))
     return f'<div class="audit-panel">{"".join(rows)}</div>'
+
+
+def list_value(items: list[str] | None) -> str:
+    """The raw cell for a list-valued variable, matching what labels.csv records.
+
+    The three states must stay distinguishable in the panel exactly as they
+    are in the CSV: null is "the agent was never asked" (no ad sub-flag is 1
+    for `brands`; has_food != 1 for `foods`), [] is "asked, nothing
+    identifiable", and a list names what was found. Rendering the first two
+    the same way would hide the distinction these variables exist to record.
+    """
+    if items is None:
+        return "null"
+    if not items:
+        return "[]"
+    return ", ".join(items)
+
+
+def brands_hint(brands: list[str] | None) -> str:
+    """Plain-English reading of each of the three `brands` states."""
+    if brands is None:
+        return "not applicable"
+    if not brands:
+        return "advertising, no payer identified"
+    return "paid for this promotion"
+
+
+def foods_hint(foods: list[str] | None) -> str:
+    """Plain-English reading of each of the three `foods` states."""
+    if foods is None:
+        return "not applicable"
+    if not foods:
+        return "food present, nothing specific identifiable"
+    return "visible in the frames"
+
+
+def audit_item(field: str, shown: str, hint: str, *, flagged: bool,
+               reason: str | None) -> str:
+    """One nutrition-facts row: the raw value, its reading, and any reason."""
+    value_class = "audit-value flag" if flagged else "audit-value"
+    reason_html = (
+        f'<div class="audit-reason">{html.escape(reason)}</div>'
+        if reason else ""
+    )
+    return (
+        f'<div class="audit-item">'
+        f'<div class="audit-row">'
+        f'<span class="audit-field">{html.escape(field)}</span>'
+        f'<span class="audit-dots"></span>'
+        f'<span class="{value_class}">{html.escape(shown)}'
+        f'<span class="hint">— {html.escape(hint)}</span></span>'
+        f'</div>'
+        f'{reason_html}'
+        f'</div>'
+    )
 
 
 def display_name(image_path: str) -> str:
@@ -430,11 +534,10 @@ def render_codebook() -> None:
 # 2. A counting wrapper around the low-level API calls is a backstop that
 #    raises if the pre-check estimate was wrong.
 #
-# pipeline.py does `from .openrouter import ... complete, transcribe` — a
-# from-import — so patching puppets.openrouter.complete has no effect on
-# calls made from inside pipeline.py. The names actually invoked live as
-# puppets.pipeline.complete / puppets.pipeline.transcribe, and those are
-# what must be rebound.
+# pipeline.py does `from .openrouter import ... complete` — a from-import —
+# so patching puppets.openrouter.complete has no effect on calls made from
+# inside pipeline.py. The name actually invoked lives as
+# puppets.pipeline.complete, and that is what must be rebound.
 #
 # pipeline.run uses a ThreadPoolExecutor, so the wrapper is invoked from
 # worker threads — a threading.Lock protects the counter, and the counter
@@ -463,7 +566,7 @@ class _CallBudget:
 
 
 def _install_call_cap_wrapper() -> None:
-    """Rebind puppets.pipeline.complete/transcribe to count and cap calls.
+    """Rebind puppets.pipeline.complete to count and cap calls.
 
     Guarded by a sentinel attribute so a Streamlit rerun does not wrap an
     already-wrapped function.
@@ -472,7 +575,6 @@ def _install_call_cap_wrapper() -> None:
         return
 
     real_complete = pipeline.complete
-    real_transcribe = pipeline.transcribe
 
     def counted_complete(*args, **kwargs):
         budget = st.session_state.get("_call_budget")
@@ -480,14 +582,7 @@ def _install_call_cap_wrapper() -> None:
             budget.charge(1)
         return real_complete(*args, **kwargs)
 
-    def counted_transcribe(*args, **kwargs):
-        budget = st.session_state.get("_call_budget")
-        if budget is not None:
-            budget.charge(1)
-        return real_transcribe(*args, **kwargs)
-
     pipeline.complete = counted_complete
-    pipeline.transcribe = counted_transcribe
     pipeline._call_cap_installed = True
 
 
@@ -497,9 +592,9 @@ if "_call_budget" not in st.session_state:
     st.session_state["_call_budget"] = _CallBudget(MAX_CALLS)
 
 
-def _estimate_calls(n_units: int, audio_escalation: bool) -> int:
-    """Worst case: 3 calls/unit (agent flow), plus 2/unit if audio may fire."""
-    return n_units * 3 + (2 if audio_escalation else 0)
+def _estimate_calls(n_units: int) -> int:
+    """Worst case per unit — see MAX_CALLS_PER_UNIT."""
+    return n_units * MAX_CALLS_PER_UNIT
 
 
 # --- Sidebar: run settings -------------------------------------------------
@@ -519,12 +614,21 @@ with st.sidebar:
         st.caption("Used by the focused per-field agents, which make "
                    "one focused call per label. Leave a field blank to use "
                    f"the model above (`{DEFAULT_MODEL}`) for that agent.")
+        # One box per Config model override. PUPPETS_AD_MODEL applies to
+        # every ad sub-agent uniformly (see Config.model_for_agent), so the
+        # four ad sub-variables share a single box rather than getting one
+        # each.
         ad_model_override = st.text_input(
-            "Ad-detection model", value="", key="ad_model_override").strip()
+            "Ad-detection model (all ad sub-variables)",
+            value="", key="ad_model_override").strip()
         food_model_override = st.text_input(
             "Food-detection model", value="", key="food_model_override").strip()
         upf_model_override = st.text_input(
             "UPF-classification model", value="", key="upf_model_override").strip()
+        category_model_override = st.text_input(
+            "Food-category model", value="", key="category_model_override").strip()
+        brand_model_override = st.text_input(
+            "Sponsoring-brand model", value="", key="brand_model_override").strip()
 
     st.divider()
     budget: _CallBudget = st.session_state["_call_budget"]
@@ -535,14 +639,18 @@ with st.sidebar:
 # --- Tab 1: upload and label -----------------------------------------------
 
 
-def render_labelling(api_key: str, ad_model: str, food_model: str, upf_model: str) -> None:
+def render_labelling(api_key: str, ad_model: str, food_model: str,
+                    upf_model: str, category_model: str,
+                    brand_model: str) -> None:
     st.markdown(
         '<span class="eyebrow">SOCK-PUPPET AUDIT · PHASE 1 · UPF MARKETING</span>',
         unsafe_allow_html=True,
     )
     st.title("🧪 Screenshot labelling")
-    st.caption("Sock-puppet audit MVP — labels each screenshot for advertising, "
-               "food presence, and ultra-processed food (NOVA 4).")
+    st.caption("Sock-puppet audit MVP — labels each screenshot for the ad "
+               "disclosure sub-variables, food presence, ultra-processed food "
+               "(NOVA 4), the dietary food group, the foods on screen, and "
+               "the sponsoring brands.")
 
     uploads = st.file_uploader(
         "Upload screenshots",
@@ -562,57 +670,38 @@ def render_labelling(api_key: str, ad_model: str, food_model: str, upf_model: st
              "written to the CSV. Costs roughly a fifth more per run.",
     )
 
-    audio_upload = st.file_uploader(
-        "Video audio (optional)",
-        type=[s.lstrip(".") for s in sorted(AUDIO_SUFFIXES)],
-        accept_multiple_files=False,
-        help="The audio of the same video these frames came from. Used "
-             "only when the frames and metadata show no ad.",
-    )
-    audio_escalation = st.checkbox(
-        "Check the audio when no ad is found",
-        key="labelling_audio_escalation",
-        disabled=audio_upload is None,
-        help="Transcribes the audio and judges whether the speech "
-             "discloses a paid promotion — the case where a sponsorship "
-             "is only ever spoken. Adds 2 calls per unit that has no ad "
-             "in frame; can only turn is_ad from 0 to 1, never back.",
-    )
-    if audio_upload is None:
-        st.caption("Attach audio to enable the spoken-disclosure check.")
+    # No audio upload here any more. The channel it fed escalated to a
+    # spoken-disclosure verdict that flipped `is_ad`, and `is_ad` has been
+    # decomposed into the sub-variables in schema.AD_SUBVARIABLES, none of
+    # which is a spoken disclosure — so there is nothing for that verdict to
+    # set. Config.audio_escalation raises rather than silently doing nothing;
+    # the uploader comes back when a spoken-sponsorship sub-variable lands.
 
     go = st.button("Run labelling", type="primary",
                    disabled=not uploads or not api_key, width="stretch")
 
     if go:
         budget: _CallBudget = st.session_state["_call_budget"]
-        escalation_armed = audio_escalation and audio_upload is not None
-        estimate = _estimate_calls(1, escalation_armed)
+        estimate = _estimate_calls(1)
         if estimate > budget.remaining():
             st.error(
                 f"This run could take up to {estimate} API call(s), but only "
                 f"{budget.remaining()} remain in this session's budget of "
-                f"{budget.max_calls}. Start a new session, or turn off audio "
-                f"escalation to reduce the estimate."
+                f"{budget.max_calls}. Start a new session to label more."
             )
             return
         cfg = Config(api_key=api_key, model=DEFAULT_MODEL, mode=DEFAULT_MODE,
                      temperature=0.0, max_workers=1, timeout=120, max_retries=3,
                      ad_model=ad_model, food_model=food_model, upf_model=upf_model,
-                     rationale=rationale,
-                     audio_escalation=escalation_armed)
+                     category_model=category_model, brand_model=brand_model,
+                     rationale=rationale)
         with tempfile.TemporaryDirectory() as staging:
             paths = stage_uploads(uploads, Path(staging))
-            audio_path = None
-            if cfg.audio_escalation:
-                audio_path = Path(staging) / audio_upload.name
-                audio_path.write_bytes(audio_upload.getbuffer())
             with st.spinner(f"Labelling {len(paths)} image(s)…"):
                 logger.info("starting labelling run: 1 bundle, model=%s", cfg.model)
                 start = time.monotonic()
                 try:
-                    results, summary = run(
-                        cfg, [Bundle(images=paths, audio=audio_path)])
+                    results, summary = run(cfg, [Bundle(images=paths)])
                 except RuntimeError as exc:
                     st.error(str(exc))
                     return
@@ -623,16 +712,12 @@ def render_labelling(api_key: str, ad_model: str, food_model: str, upf_model: st
                 )
             # Read image bytes now — the staging directory disappears on exit.
             thumbnails = {str(p): p.read_bytes() for p in paths}
-        # cfg is local to this branch, but the panel below re-renders from
-        # session state on every later rerun — so whether escalation was
-        # armed has to travel with the results, not be read off cfg.
-        st.session_state["run"] = (results, summary, thumbnails,
-                                   cfg.audio_escalation)
+        st.session_state["run"] = (results, summary, thumbnails)
 
     if "run" not in st.session_state:
         return
 
-    results, summary, thumbnails, ran_with_audio = st.session_state["run"]
+    results, summary, thumbnails = st.session_state["run"]
 
     st.divider()
     st.subheader("Results")
@@ -644,36 +729,12 @@ def render_labelling(api_key: str, ad_model: str, food_model: str, upf_model: st
     cols[0].metric("Total cost", f"${summary.total_cost_usd:.6f}")
     cols[1].metric("Cost per image", f"${summary.mean_cost_per_image_usd:.6f}")
     cols[2].metric("Cost per API call", f"${summary.mean_cost_per_call_usd:.6f}",
-                   help="Agent flow makes 2-3 API calls per unit, so this is "
-                        "not the same as cost per image.")
+                   help=f"Agent flow makes up to {MAX_CALLS_PER_UNIT} API "
+                        "calls per unit, so this is not the same as cost per "
+                        "image.")
     cols[3].metric("API calls", f"{summary.n_api_calls:,}")
     cols[4].metric("Tokens", f"{summary.total_prompt_tokens:,} in / "
                              f"{summary.total_completion_tokens:,} out")
-    # Only shown when the audio channel actually ran, so a normal run's
-    # results panel is unchanged.
-    if summary.n_escalations:
-        flips = sum(1 for r in results if r.audio_is_ad == 1)
-        st.caption(
-            f"{summary.n_escalations} unit(s) had no ad in frame or metadata "
-            f"and were checked against the audio, at "
-            f"${summary.audio_cost_usd:.6f} of the total. "
-            f"{flips} were flipped to is_ad = 1 by what was said."
-        )
-    elif ran_with_audio:
-        # Escalation was armed and never fired. Silence here would read as
-        # "the audio agreed", which is not what happened.
-        st.caption(
-            "The audio was never checked: every unit already had an ad in "
-            "frame or metadata, so nothing reached the escalation trigger."
-        )
-    audio_errors = [r for r in results if r.audio_error]
-    if audio_errors:
-        st.caption(
-            f"{len(audio_errors)} unit(s) could not be checked against the "
-            f"audio: {audio_errors[0].audio_error}. Their other labels are "
-            f"unaffected."
-        )
-
     if summary.n_label_sets and summary.n_api_calls != summary.n_label_sets:
         st.caption(f"{summary.n_label_sets} unit(s) labelled via "
                    f"{summary.n_api_calls} API call(s) — "
@@ -723,6 +784,8 @@ def render_labelling(api_key: str, ad_model: str, food_model: str, upf_model: st
 
 tab_labelling, tab_codebook = st.tabs(["Labelling", "Codebook"])
 with tab_labelling:
-    render_labelling(api_key, ad_model_override, food_model_override, upf_model_override)
+    render_labelling(api_key, ad_model_override, food_model_override,
+                     upf_model_override, category_model_override,
+                     brand_model_override)
 with tab_codebook:
     render_codebook()

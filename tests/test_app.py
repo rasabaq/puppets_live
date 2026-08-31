@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from puppets.pipeline import LabelResult, RunSummary
+from puppets.schema import AD_FIELDS, UNDISCLOSED_FIELD
 
 try:
     from streamlit.testing.v1 import AppTest
@@ -19,17 +20,26 @@ PNG_1PX = base64.b64decode(
 )
 
 
-def fake_run(mode: str = "per_bundle", with_error: bool = False,
-             audio_escalation: bool = False, n_escalations: int = 0,
-             audio_is_ad: int | None = None):
-    results = [
-        LabelResult(image_paths=["/tmp/staging/001_ad_shot.png"], bundle_id="run-b0001",
-                    is_ad=1, has_food=1, is_upf=1, prompt_tokens=1200,
-                    completion_tokens=18, cost_usd=0.00212),
-        LabelResult(image_paths=["/tmp/staging/002_feed.png"], bundle_id="run-b0001",
-                    is_ad=0, has_food=0, is_upf=None, prompt_tokens=1180,
-                    completion_tokens=17, cost_usd=0.00208),
-    ]
+def fake_run(mode: str = "agent_per_bundle", with_error: bool = False):
+    # An ad-and-food unit and an organic no-food one. The ad sub-flags are
+    # set through AD_FIELDS rather than named one by one, so a further
+    # sub-variable does not break this fixture.
+    ad_unit = LabelResult(
+        image_paths=["/tmp/staging/001_ad_shot.png"], bundle_id="run-b0001",
+        has_food=1, is_upf=1, food_category="sweets_and_desserts",
+        brands=["Choco Co"], foods=["chocolate bar"],
+        prompt_tokens=1200, completion_tokens=18, cost_usd=0.00212)
+    for field in AD_FIELDS:
+        # ad_undisclosed is suppressed to null by the pipeline whenever
+        # another ad flag is 1 — mirror that here.
+        setattr(ad_unit, field, None if field == UNDISCLOSED_FIELD else 1)
+    organic_unit = LabelResult(
+        image_paths=["/tmp/staging/002_feed.png"], bundle_id="run-b0001",
+        has_food=0, is_upf=None, prompt_tokens=1180,
+        completion_tokens=17, cost_usd=0.00208)
+    for field in AD_FIELDS:
+        setattr(organic_unit, field, 0)
+    results = [ad_unit, organic_unit]
     if with_error:
         results[1] = LabelResult(
             image_paths=["/tmp/staging/002_feed.png"], bundle_id="run-b0001",
@@ -47,15 +57,9 @@ def fake_run(mode: str = "per_bundle", with_error: bool = False,
         mean_cost_per_call_usd=sum(r.cost_usd for r in results) / 2,
         total_prompt_tokens=sum(r.prompt_tokens for r in results),
         total_completion_tokens=sum(r.completion_tokens for r in results),
-        n_escalations=n_escalations,
-        audio_cost_usd=0.0004 if n_escalations else 0.0,
     )
-    if audio_is_ad is not None:
-        results[1].audio_is_ad = audio_is_ad
-        if audio_is_ad == 1:
-            results[1].is_ad = 1
     thumbnails = {p: PNG_1PX for r in results for p in r.image_paths}
-    return results, summary, thumbnails, audio_escalation
+    return results, summary, thumbnails
 
 
 @unittest.skipIf(AppTest is None, "streamlit not installed")
@@ -96,7 +100,14 @@ class AppTests(unittest.TestCase):
         self.assertEqual(metrics["Total cost"], "$0.004200")
         self.assertEqual(metrics["Cost per image"], "$0.002100")
         markdown = " ".join(m.value for m in app.markdown)
-        self.assertIn("advertising", markdown)
+        # Every ad sub-variable gets its own row, and the descriptive
+        # variables are shown alongside the binary ones.
+        for field in AD_FIELDS:
+            self.assertIn(field, markdown)
+        self.assertIn("food_category", markdown)
+        self.assertIn("sweets_and_desserts", markdown)
+        self.assertIn("Choco Co", markdown)
+        self.assertIn("chocolate bar", markdown)
         self.assertIn("not applicable", markdown)
 
     def test_error_result_shows_message_not_labels(self):
@@ -131,8 +142,9 @@ class CallCapTests(unittest.TestCase):
         import app as app_module
 
         budget = app_module._CallBudget(2)
-        estimate = app_module._estimate_calls(1, audio_escalation=False)
-        # One unit costs up to 3 calls (agent flow) — over a budget of 2.
+        estimate = app_module._estimate_calls(1)
+        # One unit costs up to MAX_CALLS_PER_UNIT calls — over a budget of 2.
+        self.assertEqual(estimate, app_module.MAX_CALLS_PER_UNIT)
         self.assertGreater(estimate, budget.remaining())
 
     def test_wrapper_counts_and_caps_completions(self):

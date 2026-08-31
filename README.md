@@ -8,17 +8,35 @@ reviewed by a human.
 
 ## What it does
 
-Upload the screenshots that make up one "unit" (e.g. the frames of a video),
-optionally attach the unit's audio, and run the labelling agents. Each
-screenshot set is scored for:
+Upload the screenshots that make up one "unit" (e.g. the frames of a video)
+and run the labelling agents. Each screenshot set is scored for:
 
-- `is_ad` — is this advertising?
+Four independent ad-disclosure sub-variables — there is no single `is_ad`
+flag any more, because "is this an ad?" turned out to be four different
+questions with different answers:
+
+- `ad_paid_promotion` — was the *platform* paid to distribute this?
+- `ad_paid_advertising` — is a platform-rendered disclosure banner visible?
+- `ad_brand_owned` — is the posting account the brand itself?
+- `ad_undisclosed` — is it commercial content with no disclosure at all?
+  (Null, not 0, whenever one of the three above is 1.)
+
+Plus food and description:
+
 - `has_food` — is food present?
 - `is_upf` — is the food ultra-processed (NOVA 4)?
+- `food_category` — which of eight dietary food groups?
+- `foods` — the specific foods and drinks on screen.
+- `brands` — the brand or brands that paid for the promotion.
+
+`food_category`, `foods` and `brands` each distinguish three states in the
+results and in `labels.csv`: `null` means the agent was never asked, `[]`
+means it was asked and found nothing nameable, and a value names what it
+found. That distinction is a finding in itself, so it is never flattened.
 
 See `CODEBOOK.md` for the full variable definitions — the model's prompts
 are compiled from that document, so it is the source of truth. It was copied
-from **puppets 0.5.0** (see `vendor/VERSION` for the exact source commit);
+from the source repo (see `vendor/VERSION` for the exact version and commit);
 if the codebook changes upstream, this copy needs to be refreshed too.
 
 Results, a raw JSONL of every model response, and a cost/token summary can
@@ -100,7 +118,13 @@ shared file, and will otherwise drift.
 
 ## Notes on scope
 
-This app intentionally ships without ffmpeg or any audio transcoding: audio
-escalation uploads the user's file directly to OpenRouter's transcription
-endpoint, and the library detects format from the file suffix rather than
-transcoding, so no system audio/video tooling is required.
+This app labels frames only — there is no audio upload. The audio channel
+escalated to a spoken-disclosure verdict that flipped the old `is_ad` flag,
+and now that `is_ad` is decomposed into the four sub-variables above, none of
+them is a spoken disclosure for that verdict to set. The library disables the
+channel outright (`Config.audio_escalation` raises rather than silently doing
+nothing). The uploader comes back here when a spoken-sponsorship sub-variable
+lands upstream.
+
+This also means the app still needs no ffmpeg or audio transcoding, and no
+system audio/video tooling of any kind.
