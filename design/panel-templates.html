@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel templates</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Same tokens as app.py, so anything here drops straight in. */
+:root{
+  --ink:#011627; --porcelain:#fdfffc;
+  --teal:#2ec4b6; --teal-ink:#14867c;
+  --red:#e71d36; --red-ink:#d1102c;
+  --amber:#ff9f1c;
+  --muted:#476070; --faint:#7b929e;
+  --line:rgba(1,22,39,0.08); --line-strong:rgba(1,22,39,0.14);
+  --lift:0 1px 2px rgba(1,22,39,0.05), 0 20px 44px -26px rgba(1,22,39,0.34);
+}
+*{box-sizing:border-box}
+body{
+  margin:0; padding:32px 24px 80px;
+  background:linear-gradient(180deg,#f6f8f9 0%,#e9eef1 46%,#ccd6dc 100%);
+  background-attachment:fixed;
+  color:var(--ink); font-family:'Outfit',system-ui,sans-serif;
+}
+.page{max-width:1000px;margin:0 auto}
+h1{font-size:1.5rem;font-weight:600;letter-spacing:-0.03em;margin:0 0 24px}
+.tname{
+  font-family:'IBM Plex Mono',monospace;font-size:0.68rem;letter-spacing:0.13em;
+  text-transform:uppercase;color:var(--faint);margin:34px 0 8px;
+}
+.card{
+  background:var(--porcelain);border:1px solid var(--line);border-radius:16px;
+  padding:20px;box-shadow:var(--lift);
+}
+.eyebrow{
+  font-family:'IBM Plex Mono',monospace;font-size:0.7rem;letter-spacing:0.14em;
+  text-transform:uppercase;color:var(--faint);display:block;margin-bottom:12px;
+}
+
+/* frame placeholders */
+.frame{background:#2b1d16;border-radius:9px;border:1px solid var(--line-strong);position:relative;overflow:hidden}
+.frame::after{content:"";position:absolute;left:50%;top:50%;width:56%;aspect-ratio:1;
+  transform:translate(-50%,-50%);border-radius:50%;background:#d9452f;box-shadow:inset 0 0 0 6px #e8b45a}
+.frame.b{background:#3a2a1c}
+.frame.b::after{border-radius:10px;width:70%;aspect-ratio:1.2;background:#c9743a;box-shadow:inset 0 0 0 6px #e0a35c}
+.frame.c{background:#1d2c35}
+.frame.c::after{background:#2f4854;box-shadow:inset 0 0 0 6px #3a5766}
+.fname{font-family:'IBM Plex Mono',monospace;font-size:0.6rem;color:var(--faint);
+  margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---- verdict band ---- */
+.verdict{
+  display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+  padding:16px 18px;border-radius:14px;
+  background:linear-gradient(100deg,rgba(231,29,54,0.10),rgba(231,29,54,0.03));
+  border:1px solid rgba(231,29,54,0.24);
+}
+.verdict.clear{
+  background:linear-gradient(100deg,rgba(46,196,182,0.13),rgba(46,196,182,0.03));
+  border-color:rgba(46,196,182,0.36);
+}
+.vmain{flex:1 1 250px;min-width:0}
+.vline{font-size:1.3rem;font-weight:600;letter-spacing:-0.02em;line-height:1.2;color:#b60d24}
+.verdict.clear .vline{color:#0f6f66}
+.vsub{font-size:0.88rem;color:var(--muted);margin-top:3px}
+.axes{display:flex;gap:8px;flex-wrap:wrap}
+.axis{display:flex;flex-direction:column;gap:1px;padding:8px 12px;border-radius:10px;
+  background:#fff;border:1px solid var(--line-strong);min-width:116px}
+.axis .ak{font-family:'IBM Plex Mono',monospace;font-size:0.6rem;letter-spacing:0.12em;
+  text-transform:uppercase;color:var(--faint)}
+.axis .av{font-size:0.98rem;font-weight:600;letter-spacing:-0.01em}
+.axis.hit{background:var(--red);border-color:transparent}
+.axis.hit .ak{color:rgba(255,255,255,0.74)}
+.axis.hit .av{color:#fff}
+.axis.ok .av{color:var(--teal-ink)}
+
+/* ---- filmstrip ---- */
+.strip{display:flex;gap:10px;overflow-x:auto;padding:2px 2px 10px}
+.shot{flex:0 0 auto;width:112px}
+.shot .frame{width:112px;height:198px}
+.shot.cited .frame{border-color:var(--red);box-shadow:0 0 0 2px rgba(231,29,54,0.24)}
+
+/* ---- signal tiles ---- */
+.group{margin-top:18px}
+.ghead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
+  margin-bottom:9px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.gname{font-family:'IBM Plex Mono',monospace;font-size:0.66rem;letter-spacing:0.13em;
+  text-transform:uppercase;color:var(--muted)}
+.gq{font-size:0.82rem;color:var(--faint)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(198px,1fr));gap:8px}
+.tile{border:1px solid var(--line-strong);border-radius:11px;padding:10px 12px;background:#fff;
+  display:flex;flex-direction:column;gap:2px;min-width:0}
+.tile .k{font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--faint);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .v{font-size:0.98rem;font-weight:500;letter-spacing:-0.01em;line-height:1.25}
+.tile .raw{font-family:'IBM Plex Mono',monospace;font-size:0.66rem;color:var(--faint);margin-top:1px}
+.tile.find{border-color:rgba(231,29,54,0.42);background:rgba(231,29,54,0.045)}
+.tile.find .v{color:var(--red-ink);font-weight:600}
+.tile.find .k{color:rgba(209,16,44,0.74)}
+.tile.na{border-style:dashed;border-color:rgba(1,22,39,0.17);background:rgba(1,22,39,0.015)}
+.tile.na .v{color:var(--faint);font-weight:400;font-style:italic}
+.tile .why{font-size:0.83rem;color:var(--muted);margin-top:8px;padding-top:8px;
+  border-top:1px solid var(--line)}
+.tile .gate{font-size:0.78rem;color:var(--faint);margin-top:5px}
+
+/* ---- inline rows (compact) ---- */
+.rows{display:grid;gap:0}
+.row{display:flex;align-items:baseline;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:none}
+.row .pill{font-family:'IBM Plex Mono',monospace;font-size:0.62rem;font-weight:600;
+  width:34px;text-align:center;padding:3px 0;border-radius:5px;flex:0 0 auto;
+  background:rgba(1,22,39,0.06);color:var(--muted)}
+.row .pill.y{background:var(--red);color:#fff}
+.row .pill.n{background:rgba(46,196,182,0.16);color:var(--teal-ink)}
+.row .pill.na{background:transparent;border:1px dashed var(--line-strong);color:var(--faint)}
+.row .rv{font-size:0.94rem;font-weight:500;flex:1 1 auto;min-width:0}
+.row .rk{font-family:'IBM Plex Mono',monospace;font-size:0.66rem;color:var(--faint);
+  flex:0 0 auto;white-space:nowrap}
+
+/* ---- record ---- */
+details.record{border:1px solid var(--line-strong);border-radius:11px;background:#fff;margin-top:16px}
+details.record>summary{cursor:pointer;list-style:none;padding:11px 14px;font-size:0.88rem;
+  font-weight:500;color:var(--muted);display:flex;gap:8px;align-items:center}
+details.record>summary::-webkit-details-marker{display:none}
+details.record>summary::before{content:"\25B8";font-size:0.72rem;color:var(--faint)}
+details.record[open]>summary::before{content:"\25BE"}
+.rbody{padding:0 14px 14px;overflow-x:auto}
+.rbody table{border-collapse:collapse;font-family:'IBM Plex Mono',monospace;
+  font-size:0.7rem;white-space:nowrap;font-variant-numeric:tabular-nums}
+.rbody th{text-align:left;font-weight:500;color:var(--faint);padding:4px 16px 5px 0;
+  border-bottom:1px solid var(--line)}
+.rbody td{padding:7px 16px 7px 0}
+.rbody td.flag{color:var(--red-ink);font-weight:600}
+.rbody td.nul{color:var(--faint)}
+
+/* ---- meta footer ---- */
+.metaline{display:flex;gap:16px;flex-wrap:wrap;margin-top:16px;padding-top:12px;
+  border-top:1px solid var(--line);font-family:'IBM Plex Mono',monospace;
+  font-size:0.68rem;color:var(--faint);font-variant-numeric:tabular-nums}
+
+/* ---- run rail ---- */
+.runs{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 6px}
+.run{flex:0 0 auto;display:flex;gap:9px;align-items:center;padding:8px 13px 8px 8px;
+  border:1px solid var(--line-strong);border-radius:11px;background:#fff}
+.run.active{border-color:var(--amber);box-shadow:0 0 0 2px rgba(255,159,28,0.26)}
+.run .frame{width:26px;height:46px;border-radius:4px}
+.run .rl{display:flex;flex-direction:column;gap:1px}
+.run .rt{font-size:0.84rem;font-weight:500;white-space:nowrap}
+.run .rs{font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--faint);white-space:nowrap}
+.run .dot{width:7px;height:7px;border-radius:50%;background:var(--red);flex:0 0 auto}
+.run .dot.ok{background:var(--teal)}
+
+/* ---- old two-column, for comparison ---- */
+.two{display:grid;grid-template-columns:1fr 2fr;gap:20px}
+@media(max-width:720px){.two{grid-template-columns:1fr}}
+.thumbs{display:flex;gap:4px}
+.thumbs>div{flex:1 1 0;min-width:0}
+.thumbs .frame{width:100%;aspect-ratio:9/16;border-radius:5px}
+</style>
+</head>
+<body>
+<div class="page">
+
+<h1>Result panel templates</h1>
+
+<!-- ============ A ============ -->
+<p class="tname">A &middot; verdict band + grouped tiles</p>
+<div class="card">
+  <span class="eyebrow">Exhibit 01 &middot; 001_pizza_promo</span>
+
+  <div class="verdict">
+    <div class="vmain">
+      <div class="vline">Advertising &middot; ultra-processed</div>
+      <div class="vsub">Disclosed by a platform banner. Sponsor: Domino&rsquo;s.</div>
+    </div>
+    <div class="axes">
+      <div class="axis hit"><span class="ak">Advertising</span><span class="av">Yes &mdash; disclosed</span></div>
+      <div class="axis hit"><span class="ak">NOVA group</span><span class="av">4 &middot; ultra-processed</span></div>
+    </div>
+  </div>
+
+  <div class="group">
+    <div class="ghead"><span class="gname">Ad disclosure</span><span class="gq">Commercial content, and disclosed?</span></div>
+    <div class="tiles">
+      <div class="tile"><span class="k">ad_paid_promotion</span><span class="v">Not a platform ad placement</span><span class="raw">0</span></div>
+      <div class="tile find"><span class="k">ad_paid_advertising</span><span class="v">Paid-promotion banner visible</span><span class="raw">1</span></div>
+      <div class="tile"><span class="k">ad_brand_owned</span><span class="v">Poster is not the brand</span><span class="raw">0</span></div>
+      <div class="tile na"><span class="k">ad_undisclosed</span><span class="v">Not asked</span><span class="raw">null</span>
+        <span class="gate">Suppressed &mdash; ad_paid_advertising = 1</span></div>
+    </div>
+  </div>
+
+  <div class="group">
+    <div class="ghead"><span class="gname">Food</span><span class="gq">Food present, and ultra-processed?</span></div>
+    <div class="tiles">
+      <div class="tile"><span class="k">has_food</span><span class="v">Food present</span><span class="raw">1</span></div>
+      <div class="tile find"><span class="k">is_upf</span><span class="v">Ultra-processed &middot; NOVA 4</span><span class="raw">1</span></div>
+    </div>
+  </div>
+
+  <div class="group">
+    <div class="ghead"><span class="gname">Named on screen</span><span class="gq">What was identified?</span></div>
+    <div class="tiles">
+      <div class="tile"><span class="k">food_category</span><span class="v">Prepared dishes and mixed meals</span><span class="raw">prepared_and_other</span></div>
+      <div class="tile find"><span class="k">brands</span><span class="v">Domino&rsquo;s</span><span class="raw">["Domino's"]</span></div>
+      <div class="tile"><span class="k">foods</span><span class="v">Pizza, garlic dip</span><span class="raw">["pizza", "garlic dip"]</span></div>
+    </div>
+  </div>
+
+  <div class="metaline"><span>$0.004182</span><span>5 frames</span><span>9 API calls</span><span>12,410 in / 288 out</span></div>
+</div>
+
+<!-- ============ B ============ -->
+<p class="tname">B &middot; filmstrip on top, full width</p>
+<div class="card">
+  <span class="eyebrow">Exhibit 01 &middot; 001_pizza_promo &middot; 5 frames</span>
+  <div class="strip">
+    <div class="shot cited"><div class="frame b"></div><div class="fname">frame_01.png</div></div>
+    <div class="shot"><div class="frame"></div><div class="fname">frame_02.png</div></div>
+    <div class="shot"><div class="frame"></div><div class="fname">frame_03.png</div></div>
+    <div class="shot"><div class="frame c"></div><div class="fname">frame_04.png</div></div>
+    <div class="shot cited"><div class="frame b"></div><div class="fname">frame_05.png</div></div>
+  </div>
+  <div class="tiles" style="margin-top:6px">
+    <div class="tile find"><span class="k">ad_paid_advertising</span><span class="v">Paid-promotion banner visible</span><span class="raw">1</span></div>
+    <div class="tile find"><span class="k">is_upf</span><span class="v">Ultra-processed &middot; NOVA 4</span><span class="raw">1</span></div>
+    <div class="tile find"><span class="k">brands</span><span class="v">Domino&rsquo;s</span><span class="raw">["Domino's"]</span></div>
+    <div class="tile"><span class="k">foods</span><span class="v">Pizza, garlic dip</span><span class="raw">["pizza", "garlic dip"]</span></div>
+  </div>
+</div>
+
+<!-- ============ C ============ -->
+<p class="tname">C &middot; compact rows &mdash; value pill first</p>
+<div class="card">
+  <span class="eyebrow">Exhibit 01 &middot; 001_pizza_promo</span>
+  <div class="rows">
+    <div class="row"><span class="pill n">0</span><span class="rv">Not a platform ad placement</span><span class="rk">ad_paid_promotion</span></div>
+    <div class="row"><span class="pill y">1</span><span class="rv">Paid-promotion banner visible</span><span class="rk">ad_paid_advertising</span></div>
+    <div class="row"><span class="pill n">0</span><span class="rv">Poster is not the brand</span><span class="rk">ad_brand_owned</span></div>
+    <div class="row"><span class="pill na">&ndash;</span><span class="rv">Not asked &mdash; a disclosure already exists</span><span class="rk">ad_undisclosed</span></div>
+    <div class="row"><span class="pill n">1</span><span class="rv">Food present</span><span class="rk">has_food</span></div>
+    <div class="row"><span class="pill y">1</span><span class="rv">Ultra-processed &middot; NOVA 4</span><span class="rk">is_upf</span></div>
+    <div class="row"><span class="pill n">&bull;</span><span class="rv">Prepared dishes and mixed meals</span><span class="rk">food_category</span></div>
+    <div class="row"><span class="pill y">&bull;</span><span class="rv">Domino&rsquo;s</span><span class="rk">brands</span></div>
+    <div class="row"><span class="pill n">&bull;</span><span class="rv">Pizza, garlic dip</span><span class="rk">foods</span></div>
+  </div>
+</div>
+
+<!-- ============ D ============ -->
+<p class="tname">D &middot; tiles with reasons inline (rationale on)</p>
+<div class="card">
+  <span class="eyebrow">Exhibit 01 &middot; 001_pizza_promo</span>
+  <div class="tiles" style="grid-template-columns:repeat(auto-fit,minmax(268px,1fr))">
+    <div class="tile find"><span class="k">ad_paid_advertising</span><span class="v">Paid-promotion banner visible</span><span class="raw">1</span>
+      <span class="why">Frames 1 and 5 show TikTok&rsquo;s own &ldquo;Paid partnership with Domino&rsquo;s&rdquo; banner above the caption.</span></div>
+    <div class="tile find"><span class="k">is_upf</span><span class="v">Ultra-processed &middot; NOVA 4</span><span class="raw">1</span>
+      <span class="why">A commercially produced takeaway pizza is an industrial formulation in NOVA group 4.</span></div>
+    <div class="tile"><span class="k">food_category</span><span class="v">Prepared dishes and mixed meals</span><span class="raw">prepared_and_other</span>
+      <span class="why">Composed dish; classified as served, not by its flour, cheese and tomato inputs.</span></div>
+    <div class="tile na"><span class="k">ad_undisclosed</span><span class="v">Not asked</span><span class="raw">null</span>
+      <span class="gate">Suppressed &mdash; ad_paid_advertising = 1</span></div>
+  </div>
+</div>
+
+<!-- ============ E ============ -->
+<p class="tname">E &middot; raw record, collapsed</p>
+<div class="card">
+  <details class="record" style="margin-top:0">
+    <summary>Raw record &mdash; the row this unit writes to labels.csv</summary>
+    <div class="rbody">
+      <table>
+        <thead><tr>
+          <th>bundle_id</th><th>n_images</th><th>ad_paid_promotion</th><th>ad_paid_advertising</th>
+          <th>ad_brand_owned</th><th>ad_undisclosed</th><th>has_food</th><th>is_upf</th>
+          <th>food_category</th><th>brands</th><th>foods</th>
+        </tr></thead>
+        <tbody><tr>
+          <td>001_pizza_promo</td><td>5</td><td>0</td><td class="flag">1</td>
+          <td>0</td><td class="nul">(empty)</td><td>1</td><td class="flag">1</td>
+          <td>prepared_and_other</td><td class="flag">["Domino's"]</td><td>["pizza", "garlic dip"]</td>
+        </tr></tbody>
+      </table>
+    </div>
+  </details>
+  <div class="metaline"><span>$0.004182</span><span>5 frames</span><span>9 API calls</span><span>12,410 in / 288 out</span><span>google/gemini-2.5-flash</span></div>
+</div>
+
+<!-- ============ F ============ -->
+<p class="tname">F &middot; run rail &mdash; keep every unit in the session</p>
+<div class="card">
+  <div class="runs">
+    <div class="run active"><span class="dot"></span><div class="frame b"></div>
+      <span class="rl"><span class="rt">001_pizza_promo</span><span class="rs">ad &middot; NOVA 4</span></span></div>
+    <div class="run"><span class="dot ok"></span><div class="frame c"></div>
+      <span class="rl"><span class="rt">002_market_haul</span><span class="rs">no ad &middot; NOVA 1&ndash;3</span></span></div>
+    <div class="run"><span class="dot"></span><div class="frame"></div>
+      <span class="rl"><span class="rt">003_energy_drink</span><span class="rs">undisclosed &middot; NOVA 4</span></span></div>
+  </div>
+</div>
+
+<!-- ============ G ============ -->
+<p class="tname">G &middot; the &ldquo;clear&rdquo; verdict state</p>
+<div class="card">
+  <div class="verdict clear">
+    <div class="vmain">
+      <div class="vline">No advertising &middot; not ultra-processed</div>
+      <div class="vsub">No ad sub-flag fired. Food present: fruits and vegetables.</div>
+    </div>
+    <div class="axes">
+      <div class="axis ok"><span class="ak">Advertising</span><span class="av">No</span></div>
+      <div class="axis ok"><span class="ak">NOVA group</span><span class="av">1&ndash;3</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ current ============ -->
+<p class="tname">current &middot; what app.py renders today</p>
+<div class="card">
+  <span class="eyebrow">Exhibit 01 &middot; 001_pizza_promo</span>
+  <div class="two">
+    <div class="thumbs">
+      <div><div class="frame b"></div><div class="fname">f1</div></div>
+      <div><div class="frame"></div><div class="fname">f2</div></div>
+      <div><div class="frame"></div><div class="fname">f3</div></div>
+      <div><div class="frame c"></div><div class="fname">f4</div></div>
+      <div><div class="frame b"></div><div class="fname">f5</div></div>
+    </div>
+    <div class="rows">
+      <div class="row"><span class="rv" style="font-family:'IBM Plex Mono',monospace;font-size:0.82rem">ad_paid_promotion &nbsp; 0 <span style="color:var(--muted);font-family:Outfit">&mdash; no platform-distributed paid promotion</span></span></div>
+      <div class="row"><span class="rv" style="font-family:'IBM Plex Mono',monospace;font-size:0.82rem;color:var(--red-ink)">ad_paid_advertising &nbsp; 1 <span style="color:var(--muted);font-family:Outfit">&mdash; paid promotion disclosure banner</span></span></div>
+      <div class="row"><span class="rv" style="font-family:'IBM Plex Mono',monospace;font-size:0.82rem">ad_brand_owned &nbsp; 0 <span style="color:var(--muted);font-family:Outfit">&mdash; no brand-owned account</span></span></div>
+      <div class="row"><span class="rv" style="font-family:'IBM Plex Mono',monospace;font-size:0.82rem">ad_undisclosed &nbsp; null <span style="color:var(--muted);font-family:Outfit">&mdash; not returned</span></span></div>
+      <div class="row"><span class="rv" style="font-family:'IBM Plex Mono',monospace;font-size:0.82rem">has_food &nbsp; 1 <span style="color:var(--muted);font-family:Outfit">&mdash; food present</span></span></div>
+      <div class="row"><span class="rv" style="font-family:'IBM Plex Mono',monospace;font-size:0.82rem;color:var(--red-ink)">is_upf &nbsp; 1 <span style="color:var(--muted);font-family:Outfit">&mdash; ultra-processed (NOVA 4)</span></span></div>
+      <div class="row"><span class="rv" style="font-family:'IBM Plex Mono',monospace;font-size:0.82rem">food_category &nbsp; prepared_and_other</span></div>
+      <div class="row"><span class="rv" style="font-family:'IBM Plex Mono',monospace;font-size:0.82rem;color:var(--red-ink)">brands &nbsp; Domino's</span></div>
+      <div class="row"><span class="rv" style="font-family:'IBM Plex Mono',monospace;font-size:0.82rem">foods &nbsp; pizza, garlic dip</span></div>
+    </div>
+  </div>
+</div>
+
+</div>
+</body>
+</html>
